@@ -164,7 +164,7 @@ namespace WarpDriveMod
                 realCount = MyAPIGateway.GridGroups.GetGroup(first, GridLinkTypeEnum.Logical).Count;
             if (realCount != grids.Count)
             {
-                MyLog.Default.WriteLine($"Grid counts: {realCount} vs my {grids.Count}");
+                //MyLog.Default.WriteLine($"Grid counts: {realCount} vs my {grids.Count}");
                 Invalidate();
                 return false;
             }

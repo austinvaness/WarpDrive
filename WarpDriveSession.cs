@@ -13,6 +13,7 @@ using Sandbox.Game;
 using Sandbox.Game.Screens.Terminal.Controls;
 using Sandbox.Game.EntityComponents;
 using VRage.ModAPI;
+using VRage.Game.Entity;
 
 namespace WarpDriveMod
 {
@@ -51,7 +52,7 @@ namespace WarpDriveMod
     }
 
 
-    [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
+    [MySessionComponentDescriptor(MyUpdateOrder.Simulation)]
     public class WarpDriveSession : MySessionComponentBase
     {
         public static WarpDriveSession Instance;
@@ -75,16 +76,19 @@ namespace WarpDriveMod
             isPlayer = !MyAPIGateway.Utilities.IsDedicated;
             isHost = MyAPIGateway.Multiplayer.IsServer;
 
-            Action<IMyTerminalBlock> toggle = ToggleWarp;
-            if(isHost)
+            Action<IMyTerminalBlock> toggle;
+            MyAPIGateway.Multiplayer.RegisterMessageHandler(toggleWarpPacketId, ReceiveToggleWarp);
+            if (isHost)
             {
-                MyAPIGateway.Multiplayer.RegisterMessageHandler(toggleWarpPacketId, ReceiveToggleWarp);
                 if (isPlayer)
                 {
+                    // Session is host, toggle the warp drive directly.
                     MyLog.Default.WriteLineAndConsole("Initialized Warp Drive mod on a hosted multiplayer world.");
+                    toggle = ToggleWarp;
                 }
                 else
                 {
+                    // Do not create terminal controls on dedicated server.
                     MyLog.Default.WriteLineAndConsole("Initialized Warp Drive mod on dedicated server.");
                     return;
                 }
@@ -93,7 +97,8 @@ namespace WarpDriveMod
             {
                 if (isPlayer)
                 {
-                    toggle += TransmitToggleWarp;
+                    // Session is client, tell the host to toggle the warp drive.
+                    toggle = TransmitToggleWarp;
                     MyLog.Default.WriteLineAndConsole("Initialized Warp Drive mod on a multiplayer client.");
                 }
                 else
@@ -102,7 +107,7 @@ namespace WarpDriveMod
                 }
             }
 
-            IMyTerminalAction startWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("StartWarp");
+            IMyTerminalAction startWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarp");
             startWarp.Enabled = IsWarpDrive;
             startWarp.Name = new StringBuilder("Toggle Warp");
             startWarp.Action = toggle;
@@ -117,12 +122,50 @@ namespace WarpDriveMod
             startWarpBtn.SupportsMultipleBlocks = false;
             startWarpBtn.Action = toggle;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(startWarpBtn);
+
+            IMyTerminalControlProperty<bool> inWarp = MyAPIGateway.TerminalControls.CreateProperty<bool, IMyUpgradeModule>("WarpStatus");
+            inWarp.Enabled = IsWarpDrive;
+            inWarp.Visible = IsWarpDrive;
+            inWarp.SupportsMultipleBlocks = false;
+            inWarp.Setter = SetWarpStatus;
+            inWarp.Getter = GetWarpStatus;
+            MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(inWarp);
+        }
+
+        private bool GetWarpStatus (IMyTerminalBlock block)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return false;
+            return drive.System.WarpState != WarpSystem.State.Idle;
+        }
+
+        private void SetWarpStatus (IMyTerminalBlock block, bool state)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return;
+            if(state)
+            {
+                if(drive.System.WarpState == WarpSystem.State.Idle)
+                    drive.System.ToggleWarp(block.CubeGrid);
+            }
+            else
+            {
+                if (drive.System.WarpState != WarpSystem.State.Idle)
+                    drive.System.ToggleWarp(block.CubeGrid);
+            }
         }
 
         private void ReceiveToggleWarp (byte [] data)
         {
+            if(isHost)
+            {
+                // Message is from client and should be relayed
+                MyAPIGateway.Multiplayer.SendMessageToOthers(toggleWarpPacketId, data);
+            }
+
             long id = BitConverter.ToInt64(data, 0);
-            //long blockId = BitConverter.ToInt64(data, 8);
             IMyEntity entity;
             if (!MyAPIGateway.Entities.TryGetEntityById(id, out entity))
                 return;
@@ -136,13 +179,6 @@ namespace WarpDriveMod
             WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
             if (drive == null)
                 return;
-            //if (!HasValidSystem(drive)) client WarpDrives don't have any values
-            //    return;
-
-            //byte [] data1 = BitConverter.GetBytes(block.CubeGrid.EntityId);
-            //byte [] data2 = BitConverter.GetBytes(block.EntityId);
-            //Array.Resize(ref data1, data1.Length + data2.Length);
-            //Array.Copy(data2, 0, data1, data1.Length, data2.Length);
             MyAPIGateway.Multiplayer.SendMessageToServer(toggleWarpPacketId, BitConverter.GetBytes(block.EntityId));
         }
 
@@ -152,7 +188,7 @@ namespace WarpDriveMod
             return block?.GameLogic?.GetAs<WarpDrive>() != null;
         }
 
-        public override void UpdateBeforeSimulation ()
+        public override void Simulate ()
         {
             Runtime++;
 
@@ -183,13 +219,7 @@ namespace WarpDriveMod
                 warpSystems.Add(s);
             newSystems.Clear();
 
-        }
-
-        public override void UpdateAfterSimulation ()
-        {
-            foreach (WarpSystem s in warpSystems)
-                s.UpdateAfterSimulation();
-
+            //MyVisualScriptLogicProvider.ShowNotification($"{warpSystems.Count} grids. {Runtime / 100}", 16);
         }
 
         protected override void UnloadData ()

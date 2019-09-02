@@ -12,9 +12,9 @@
       <Description>An advanced form of jump drive that is capable of warping space to accelerate.</Description>
       <CubeSize>Large</CubeSize>
       <BlockTopology>TriangleMesh</BlockTopology>
-      <Size x="3" y="3" z="2" />
+      <Size x="2" y="4" z="2" />
       <ModelOffset x="0" y="0" z="0" />
-      <Model>Models\Cubes\Large\JumpDrive.mwm</Model>
+      <Model>Models\Cubes\Large\Refinery.mwm</Model>
       <Components>
 		<Component Subtype="SteelPlate" Count="60" />
         <Component Subtype="MetalGrid" Count="200" />
@@ -27,18 +27,20 @@
         <Component Subtype="SteelPlate" Count="120" />
       </Components>
       <CriticalComponent Subtype="Computer" Index="0" />
+      <Center x="1" y="0" z="1" />
       <MountPoints>
-        <MountPoint Side="Top" StartX="0" StartY="0" EndX="3" EndY="2" />
-        <MountPoint Side="Back" StartX="0" StartY="0" EndX="3" EndY="3" />
-        <MountPoint Side="Left" StartX="0" StartY="0" EndX="2" EndY="3" />
-        <MountPoint Side="Front" StartX="0" StartY="0" EndX="3" EndY="3" />
-        <MountPoint Side="Right" StartX="0" StartY="0" EndX="2" EndY="3" />
-        <MountPoint Side="Bottom" StartX="0" StartY="0" EndX="3" EndY="2" Default="true" />
+        <MountPoint Side="Back" StartX="0" StartY="0" EndX="2" EndY="4" />
+        <MountPoint Side="Bottom" StartX="0" StartY="1" EndX="2" EndY="2" Default="true" />
+        <MountPoint Side="Top" StartX="0" StartY="0" EndX="2" EndY="1" />
+        <MountPoint Side="Left" StartX="1" StartY="0" EndX="2" EndY="4" />
+        <MountPoint Side="Right" StartX="0" StartY="0" EndX="1" EndY="4" />
       </MountPoints>
       <BuildProgressModels>
-        <Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\JumpDriveConstruction_1.mwm" />
-        <Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\JumpDriveConstruction_2.mwm" />
-        <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\JumpDriveConstruction_3.mwm" />
+        <Model BuildPercentUpperBound="0.16" File="Models\Cubes\Large\RefineryConstruction_1.mwm" />
+        <Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\RefineryConstruction_2.mwm" />
+        <Model BuildPercentUpperBound="0.50" File="Models\Cubes\Large\RefineryConstruction_3.mwm" />
+        <Model BuildPercentUpperBound="0.83" File="Models\Cubes\Large\RefineryConstruction_4.mwm" />
+        <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\RefineryConstruction_5.mwm" />
       </BuildProgressModels>
       <MirroringY>Z</MirroringY>
       <MirroringZ>Y</MirroringZ>
@@ -61,9 +63,9 @@
       <Description>Decreases the heat generated while at warp.</Description>
       <CubeSize>Large</CubeSize>
       <BlockTopology>TriangleMesh</BlockTopology>
-      <Size x="1" y="1" z="1" />
+      <Size x="1" y="1" z="2" />
       <ModelOffset x="0" y="0" z="0" />
-      <Model>Models\Cubes\Large\gyroscope.mwm</Model>
+      <Model>Models\Cubes\Large\UpgradeProductivity.mwm</Model>
       <Components>
         <Component Subtype="SteelPlate" Count="500" />
         <Component Subtype="Construction" Count="40" />
@@ -75,12 +77,17 @@
       </Components>
       <CriticalComponent Subtype="Computer" Index="0" />
       <MountPoints>
-        <MountPoint Side="Bottom" StartX="0" StartY="0" EndX="1" EndY="1" />
+        <MountPoint Side="Right" StartX="0.15" StartY="0.15" EndX="1.85" EndY="0.85" Default="true" />
+        <MountPoint Side="Left" StartX="0.15" StartY="0.15" EndX="1.85" EndY="0.85" />
+        <MountPoint Side="Top" StartX="0.15" StartY="0.15" EndX="0.85" EndY="1.85" />
+        <MountPoint Side="Bottom" StartX="0.15" StartY="0.15" EndX="0.85" EndY="1.85" />
+        <MountPoint Side="Front" StartX="0.15" StartY="0.15" EndX="0.85" EndY="0.85" />
+        <MountPoint Side="Back" StartX="0.15" StartY="0.15" EndX="0.85" EndY="0.85" />
       </MountPoints>
       <BuildProgressModels>
-        <Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\GyroscopeConstruction_1.mwm" />
-        <Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\GyroscopeConstruction_2.mwm" />
-        <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\GyroscopeConstruction_3.mwm" />
+        <Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\UpgradeProductivityConstruction_1.mwm" />
+        <Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\UpgradeProductivityConstruction_2.mwm" />
+        <Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\UpgradeProductivityConstruction_3.mwm" />
       </BuildProgressModels>
       <MirroringY>Z</MirroringY>
       <MirroringZ>Y</MirroringZ>

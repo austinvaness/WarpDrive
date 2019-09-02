@@ -100,7 +100,6 @@ namespace WarpDriveMod
             if (Block.MarkedForClose || Block.CubeGrid.MarkedForClose)
                 return;
             WarpDriveSession.Instance.DelayedGetWarpSystem(this);
-            //SetWarpSystem(WarpDriveSession.Instance.GetWarpSystem(this));
         }
 
         public void SetWarpSystem(WarpSystem system)

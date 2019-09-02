@@ -26,7 +26,7 @@ namespace WarpDriveMod
         private MatrixD gridMatrix;
         private Dictionary<IMyCubeGrid, HashSet<WarpDrive>> warpDrives = new Dictionary<IMyCubeGrid, HashSet<WarpDrive>>();
         private MyParticleEffect effect;
-        private double currentSpeed = WarpConstants.startSpeed;
+        private double currentSpeedPt = WarpConstants.startSpeed;
         private MyEntity3DSoundEmitter sound;
         private int startChargeRuntime = -1;
         private bool hasEnoughPower = true;
@@ -54,7 +54,7 @@ namespace WarpDriveMod
             {
                 totalHeat = oldSystem.totalHeat;
                 startWarpSource = oldSystem.startWarpSource;
-                if (startWarpSource.MarkedForClose)
+                if (startWarpSource?.MarkedForClose == true)
                     startWarpSource = null;
                 WarpState = oldSystem.WarpState;
                 if (WarpState == State.Charging)
@@ -65,7 +65,7 @@ namespace WarpDriveMod
                 }
                 else if (WarpState == State.Active)
                 {
-                    currentSpeed = oldSystem.currentSpeed;
+                    currentSpeedPt = oldSystem.currentSpeedPt;
                     WarpState = State.Active;
                 }
             }
@@ -90,12 +90,6 @@ namespace WarpDriveMod
 
             if (WarpState == State.Active)
                 InWarp();
-        }
-
-        public void UpdateAfterSimulation ()
-        {
-            if (WarpState == State.Active)
-                grid.MainGrid.Physics.ClearSpeed();
         }
 
         private void InWarp ()
@@ -128,16 +122,37 @@ namespace WarpDriveMod
                 return;
             }
 
-            if (currentSpeed < WarpConstants.maxSpeed)
-                currentSpeed += WarpConstants.warpAccel;
-            if (currentSpeed > WarpConstants.maxSpeed)
-                currentSpeed = WarpConstants.maxSpeed;
+            if (!grid.IsStatic)
+                SetStatic(true);
+
+            if (currentSpeedPt < WarpConstants.maxSpeed)
+                currentSpeedPt += WarpConstants.warpAccel;
+            if (currentSpeedPt > WarpConstants.maxSpeed)
+                currentSpeedPt = WarpConstants.maxSpeed;
 
             sound.SetPosition(grid.MainGrid.PositionComp.GetPosition());
 
-            grid.MainGrid.Physics.SetSpeeds(gridMatrix.Forward * currentSpeed * 60, Vector3.Zero);
-            gridMatrix.Translation += gridMatrix.Forward * currentSpeed;
-            //grid.MainGrid.Teleport(gridMatrix);
+            gridMatrix.Translation += gridMatrix.Forward * currentSpeedPt;
+            grid.MainGrid.Teleport(gridMatrix);
+        }
+
+        private void SetStatic (bool isStatic)
+        {
+            foreach(MyCubeGrid g in grid.Grids)
+            {
+                if(g.Physics != null && g.Physics.Enabled)
+                {
+                    if (isStatic)
+                    {
+                        g.Physics.ClearSpeed();
+                        g.ConvertToStatic();
+                    }
+                    else
+                    {
+                        g.OnConvertToDynamic();
+                    }
+                }
+            }
         }
 
         public void ToggleWarp (IMyCubeGrid source)
@@ -181,6 +196,10 @@ namespace WarpDriveMod
 
                 PlayParticleEffect();
             }
+            else
+            {
+                SendMessage(WarpConstants.warnStatic);
+            }
         }
 
         private void StartWarp ()
@@ -192,7 +211,10 @@ namespace WarpDriveMod
             }
 
             if (grid.IsStatic)
+            {
+                SendMessage(WarpConstants.warnStatic);
                 return;
+            }
 
             if (effect != null)
                 StopParticleEffect();
@@ -208,15 +230,14 @@ namespace WarpDriveMod
                 double dot = Vector3D.Dot(currentVelocity.Value, gridMatrix.Forward);
                 if (double.IsNaN(dot) || gridMatrix == MatrixD.Zero)
                     dot = 0;
-                currentSpeed = MathHelper.Clamp(dot, WarpConstants.startSpeed, WarpConstants.maxSpeed);
+                currentSpeedPt = MathHelper.Clamp(dot, WarpConstants.startSpeed, WarpConstants.maxSpeed);
             }
             else
             {
-                currentSpeed = WarpConstants.startSpeed;
+                currentSpeedPt = WarpConstants.startSpeed;
             }
 
-            FreezeGrid();
-
+            SetStatic(true);
         }
 
         private void Dewarp ()
@@ -224,7 +245,7 @@ namespace WarpDriveMod
             if (WarpState == State.Active)
             {
                 sound.PlaySound(WarpConstants.jumpOutSound, true);
-                FreezeGrid();
+                SetStatic(false);
             }
             else
             {
@@ -249,11 +270,20 @@ namespace WarpDriveMod
             if(!hasEnoughPower)
             {
                 SendMessage(WarpConstants.warnNoPower);
+                Dewarp();
+                return;
             }
 
             if (IsInGravity())
             {
                 SendMessage(WarpConstants.warnNoEstablish);
+                Dewarp();
+                return;
+            }
+
+            if(grid.IsStatic)
+            {
+                SendMessage(WarpConstants.warnStatic);
                 Dewarp();
                 return;
             }
@@ -295,15 +325,13 @@ namespace WarpDriveMod
                 totalPower = WarpConstants.baseRequiredPower;
             if (WarpState == State.Active)
             {
-                float percent = (float)(1 + currentSpeed / WarpConstants.maxSpeed * WarpConstants.powerRequirementMultiplier);
+                float percent = (float)(1 + currentSpeedPt / WarpConstants.maxSpeed * WarpConstants.powerRequirementMultiplier);
                 totalPower = WarpConstants.baseRequiredPower * percent;
+                SendMessage($"Speed: {currentSpeedPt * 60 / 1000:0} km/s", 1f / 60, "White");
             }
 
             if (warpDrives.Count == 0)
-            {
-                //SendMessage("Error! No warp drives.", 1);
                 return;
-            }
 
             HashSet<WarpDrive> controllingDrives;
             if (startWarpSource == null || !warpDrives.TryGetValue(startWarpSource, out controllingDrives))
@@ -343,16 +371,14 @@ namespace WarpDriveMod
             totalHeat -= (WarpConstants.heatDissipationDrive * temp + WarpConstants.heatDissapationRadiator * radiators);
             if (WarpState == State.Active)
                 totalHeat += WarpConstants.heatGain;
-            if(totalHeat < 0)
+            if(totalHeat <= 0)
             {
                 totalHeat = 0;
-                SendMessage("Heat: 0%", 1.02f / 60, "White");
+                //SendMessage($"Heat: 0% ({radiators})", 1f / 60, "White");
             }
-            else
+            else if(WarpState == State.Active || totalHeat > 0)
             {
                 int percentHeat = (int)(totalHeat / WarpConstants.maxHeat * 100);
-                //if (percentHeat <= 5)
-                //    return;
                 string display = $"Heat: {percentHeat}%";
                 string font = "White";
                 if (percentHeat >= 65)
@@ -361,8 +387,9 @@ namespace WarpDriveMod
                     display += '!';
                 if (percentHeat >= 85)
                     display += '!';
-                SendMessage(display, 1.02f / 60, font);
+                SendMessage(display, 1f / 60, font);
             }
+
         }
 
         private void PlayParticleEffect ()
@@ -400,6 +427,7 @@ namespace WarpDriveMod
 
         private void OnSystemInvalidated (GridSystem system)
         {
+            SetStatic(false);
             sound?.StopSound(true);
             effect?.Stop();
             onSystemInvalidated?.Invoke(this);

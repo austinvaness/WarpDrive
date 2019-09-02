@@ -92,6 +92,7 @@
   <ItemGroup>
     <Compile Include="GridSystem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="AsteroidBlocker.cs" />
     <Compile Include="WarpDrive.cs" />
     <Compile Include="WarpSystem.cs" />
     <Compile Include="WarpDriveSession.cs" />
@@ -105,7 +106,7 @@
     <Content Include="Workshop\thumb.jpg" />
   </ItemGroup>
   <ItemGroup>
-    <Analyzer Include="..\..\SEWhitelistChecker.dll" />
+    <Analyzer Include="..\..\VS2017\SEWhitelistChecker.dll" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
