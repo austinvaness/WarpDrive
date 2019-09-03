@@ -23,9 +23,25 @@ namespace WarpDriveMod
     {
         public IMyFunctionalBlock Block { get; private set; }
         public WarpSystem System { get; private set; }
-        public float RequiredPower;
+        
+        // Ugly workaround
+        public float RequiredPower
+        {
+            get
+            {
+                return _requiredPower;
+            }
+            set
+            {
+                prevRequiredPower = _requiredPower;
+                _requiredPower = value;
+            }
+        }
+        private float prevRequiredPower;
+        private float _requiredPower;
+
         public int Radiators { get; private set; }
-        public bool HasPower => sink.CurrentInputByType(WarpConstants.ElectricityId) >= sink.RequiredInputByType(WarpConstants.ElectricityId);
+        public bool HasPower => sink.CurrentInputByType(WarpConstants.ElectricityId) >= prevRequiredPower;
 
         private MyResourceSinkComponent sink;
         private int initStart;
@@ -34,6 +50,7 @@ namespace WarpDriveMod
         public override void Init (MyObjectBuilder_EntityBase objectBuilder)
         {
             Block = (IMyFunctionalBlock)Entity;
+            Block.AppendingCustomInfo += Block_AppendingCustomInfo;
 
             Block.AddUpgradeValue("Radiators", 0);
             Block.OnUpgradeValuesChanged += OnUpgradeValuesChanged;
@@ -44,9 +61,15 @@ namespace WarpDriveMod
             NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME;
         }
 
+        private void Block_AppendingCustomInfo (IMyTerminalBlock arg1, StringBuilder arg2)
+        {
+            arg2?.Append("Radiators: ").Append(Radiators).Append("/ 16\n");
+        }
+
         private void OnUpgradeValuesChanged ()
         {
             Radiators = (int)Block.UpgradeValues ["Radiators"];
+            Block.RefreshCustomInfo();
         }
 
         public override void UpdateBeforeSimulation ()
@@ -75,7 +98,7 @@ namespace WarpDriveMod
 
         public override void Close ()
         {
-            if(System != null)
+            if (System != null)
                 System.onSystemInvalidated -= OnSystemInvalidated;
         }
 
@@ -95,14 +118,14 @@ namespace WarpDriveMod
             return RequiredPower;
         }
 
-        private void OnSystemInvalidated(WarpSystem system)
+        private void OnSystemInvalidated (WarpSystem system)
         {
             if (Block.MarkedForClose || Block.CubeGrid.MarkedForClose)
                 return;
             WarpDriveSession.Instance.DelayedGetWarpSystem(this);
         }
 
-        public void SetWarpSystem(WarpSystem system)
+        public void SetWarpSystem (WarpSystem system)
         {
             System = system;
             System.onSystemInvalidated += OnSystemInvalidated;

@@ -134,6 +134,40 @@ namespace WarpDriveMod
 
             gridMatrix.Translation += gridMatrix.Forward * currentSpeedPt;
             grid.MainGrid.Teleport(gridMatrix);
+            DrawAllLines();
+        }
+
+        private void DrawAllLines()
+        {
+            float r = Math.Max(GetRadius() + 5, 5);
+            Vector3D pos = grid.MainGrid.Physics.CenterOfMassWorld;
+            Vector3D centerStart = pos - (gridMatrix.Forward * 2000);
+            Vector3D centerEnd = pos + (gridMatrix.Forward * 2000);
+            DrawLine(centerStart + (gridMatrix.Left * r), centerEnd + (gridMatrix.Left * r), 25);
+            DrawLine(centerStart + (gridMatrix.Right * r), centerEnd + (gridMatrix.Right * r), 25);
+            DrawLine(centerStart + (gridMatrix.Up * r), centerEnd + (gridMatrix.Up * r), 25);
+            DrawLine(centerStart + (gridMatrix.Down * r), centerEnd + (gridMatrix.Down * r), 25);
+        }
+
+        private float GetRadius ()
+        {
+            MyCubeGrid sys = grid.MainGrid;
+            float s = 2.5f;
+            if (sys.GridSizeEnum == MyCubeSize.Small)
+                s = 0.5f;
+            Vector3I v = sys.Max - sys.Min;
+            v.Z = 0;
+            return ((float)v.Length() / 2) * s;
+        }
+
+        private void DrawLine (Vector3D startPos, Vector3D endPos, float rad)
+        {
+            Vector4 baseCol = Color.LightBlue;
+            string material = "WeaponLaser";
+            float ranf = MyUtils.GetRandomFloat(0.75f * rad, 1.5f * rad);
+            MySimpleObjectDraw.DrawLine(startPos, endPos, MyStringId.GetOrCompute(material), ref baseCol, ranf);
+            MySimpleObjectDraw.DrawLine(startPos, endPos, MyStringId.GetOrCompute(material), ref baseCol, ranf * 0.66f);
+            MySimpleObjectDraw.DrawLine(startPos, endPos, MyStringId.GetOrCompute(material), ref baseCol, ranf * 0.33f);
         }
 
         private void SetStatic (bool isStatic)
@@ -327,7 +361,7 @@ namespace WarpDriveMod
             {
                 float percent = (float)(1 + currentSpeedPt / WarpConstants.maxSpeed * WarpConstants.powerRequirementMultiplier);
                 totalPower = WarpConstants.baseRequiredPower * percent;
-                SendMessage($"Speed: {currentSpeedPt * 60 / 1000:0} km/s", 1f / 60, "White");
+                SendMessage ($"Speed: {currentSpeedPt * 60 / 1000:0} km/s", 1f / 60, "White");
             }
 
             if (warpDrives.Count == 0)
@@ -342,7 +376,7 @@ namespace WarpDriveMod
 
             int radiators = 0;
             hasEnoughPower = true;
-            int temp = 0;
+            int numFunctional = 0;
             foreach(WarpDrive drive in controllingDrives)
             {
                 if (drive.Block.IsFunctional && drive.Block.IsWorking)
@@ -357,9 +391,10 @@ namespace WarpDriveMod
                         // later ticks
                         if (!drive.HasPower)
                             hasEnoughPower = false;
+
                         drive.RequiredPower = totalPower / functionalDrives;
                     }
-                    temp++;
+                    numFunctional++;
                     radiators += drive.Radiators;
                 }
                 else
@@ -367,8 +402,8 @@ namespace WarpDriveMod
                     drive.RequiredPower = 0;
                 }
             }
-            functionalDrives = temp;
-            totalHeat -= (WarpConstants.heatDissipationDrive * temp + WarpConstants.heatDissapationRadiator * radiators);
+            functionalDrives = numFunctional;
+            totalHeat -= (WarpConstants.heatDissipationDrive * numFunctional + WarpConstants.heatDissapationRadiator * radiators);
             if (WarpState == State.Active)
                 totalHeat += WarpConstants.heatGain;
             if(totalHeat <= 0)

@@ -39,7 +39,7 @@ namespace WarpDriveMod
         public const float maxHeat = 100; // Shutdown when this amount of heat has been reached.
         public const float heatGain = 10 / 60f; // Amount of heat gained per tick
         public const float heatDissipationDrive = 1 / 60f; // Amount of heat dissipated by warp drives every tick
-        public const float heatDissapationRadiator = 2 / 60f; // Amount of heat dissipated by radiators every tick
+        public const float heatDissapationRadiator = 0.85f / 60f; // Amount of heat dissipated by radiators every tick
 
         public static MySoundPair inWarpSound = new MySoundPair("ShipJumpDriveRecharge", true);
         public static MySoundPair chargingSound = new MySoundPair("ShipJumpDriveCharging", true);

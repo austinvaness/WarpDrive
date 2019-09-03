@@ -21,7 +21,7 @@ namespace WarpDriveMod
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_Character), false, "WarpDriveLarge")]
     public class AsteroidBlocker : MyGameLogicComponent
     {
-        private IMyCharacter cha;
+        /*private IMyCharacter cha;
         private MyEntity guard;
 
         public override void Init (MyObjectBuilder_EntityBase objectBuilder)
@@ -61,6 +61,6 @@ namespace WarpDriveMod
                 return ent;
             }
             catch (Exception ex) { MyLog.Default.WriteLine($"Exception in EmptyEntity: {ex}"); return null; }
-        }
+        }*/
     }
 }
