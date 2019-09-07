@@ -22,6 +22,7 @@ namespace WarpDriveMod
         public IReadOnlyCollection<MyCubeGrid> Grids => grids;
         public int Id { get; private set; }
         public MyCubeGrid MainGrid => grids.FirstOrDefault();
+        public bool HasCockpit { get; private set; }
 
         private int staticCount;
         private Dictionary<MyCubeGrid, HashSet<IMyShipController>> cockpits = new Dictionary<MyCubeGrid, HashSet<IMyShipController>>();
@@ -209,16 +210,22 @@ namespace WarpDriveMod
         public IMyShipController FindMainCockpit ()
         {
             if (grids.Count == 0)
+            {
+                HasCockpit = false;
                 return null;
+            }
 
             // Loop through all grids starting at largest until an in use one is found
-            foreach(MyCubeGrid grid in grids)
+            foreach (MyCubeGrid grid in grids)
             {
                 {
                     // Use the main cockpit if it exists
                     IMyTerminalBlock block = grid.MainCockpit;
                     if (block != null && IsShipController(block))
+                    {
+                        HasCockpit = ((IMyShipController)block).IsUnderControl;
                         return (IMyShipController)block;
+                    }
                 }
 
                 HashSet<IMyShipController> gridCockpits;
@@ -227,11 +234,15 @@ namespace WarpDriveMod
                     foreach (IMyShipController cockpit in gridCockpits)
                     {
                         if (cockpit.IsUnderControl)
+                        {
+                            HasCockpit = true;
                             return cockpit;
+                        }
                     }
                 }
             }
 
+            HasCockpit = false;
             // No in use cockpit was found.
             {
                 MyCubeGrid largestGrid = grids.FirstOrDefault();

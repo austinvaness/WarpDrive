@@ -35,6 +35,7 @@ namespace WarpDriveMod
         public const string warnInUse = "Grid is already at warp!";
         public const string warnNoEstablish = "Unable to establish warp field!";
         public const string warnOverheat = "Warp drive overheated!";
+        public const string warnSafety = "Safety triggered, disengaging warp drive!";
 
         public const float maxHeat = 100; // Shutdown when this amount of heat has been reached.
         public const float heatGain = 10 / 60f; // Amount of heat gained per tick
@@ -106,14 +107,40 @@ namespace WarpDriveMod
                     throw new Exception("Session is not host or client. What?!");
                 }
             }
+            // Actions
+            IMyTerminalAction toggleWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarp");
+            toggleWarp.Enabled = IsWarpDrive;
+            toggleWarp.Name = new StringBuilder("Toggle Warp");
+            toggleWarp.Action = toggle;
+            toggleWarp.Icon = "Textures\\GUI\\Icons\\Actions\\Toggle.dds";
+            toggleWarp.Writer = GetWarpStatusText;
+            MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(toggleWarp);
 
-            IMyTerminalAction startWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarp");
+            /*IMyTerminalAction startWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarpOn");
             startWarp.Enabled = IsWarpDrive;
-            startWarp.Name = new StringBuilder("Toggle Warp");
-            startWarp.Action = toggle;
-            startWarp.Icon = "Textures\\GUI\\Icons\\Actions\\Toggle.dds";
+            startWarp.Name = new StringBuilder("Warp On");
+            startWarp.Action = (x) => { }; //TODO
+            startWarp.Icon = "Textures\\GUI\\Icons\\Actions\\SwitchOn.dds";
+            startWarp.Writer = GetWarpStatusText;
             MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(startWarp);
 
+            IMyTerminalAction endWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarpOff");
+            endWarp.Enabled = IsWarpDrive;
+            endWarp.Name = new StringBuilder("Warp Off");
+            endWarp.Action = (x) => { }; //TODO
+            endWarp.Icon = "Textures\\GUI\\Icons\\Actions\\SwitchOff.dds";
+            endWarp.Writer = GetWarpStatusText;
+            MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(endWarp);*/
+
+            IMyTerminalAction toggleSafety = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleSafety");
+            toggleSafety.Enabled = IsWarpDrive;
+            toggleSafety.Name = new StringBuilder("Toggle Safety");
+            toggleSafety.Action = ToggleSafety;
+            toggleSafety.Icon = "Textures\\GUI\\Icons\\Actions\\Toggle.dds";
+            toggleSafety.Writer = GetSafetyText;
+            MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(toggleSafety);
+
+            // Controls
             IMyTerminalControlButton startWarpBtn = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlButton, IMyUpgradeModule>("StartWarpBtn");
             startWarpBtn.Tooltip = MyStringId.GetOrCompute("Toggles the status of the warp drives on the ship");
             startWarpBtn.Title = MyStringId.GetOrCompute("Toggle Warp");
@@ -123,6 +150,19 @@ namespace WarpDriveMod
             startWarpBtn.Action = toggle;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(startWarpBtn);
 
+            IMyTerminalControlCheckbox safetyCheckbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyUpgradeModule>("Safety");
+            safetyCheckbox.Tooltip = MyStringId.GetOrCompute("When checked, the warp drive will not function without a player on the ship.");
+            safetyCheckbox.Title = MyStringId.GetOrCompute("Safety");
+            safetyCheckbox.OffText = MyStringId.GetOrCompute("Off");
+            safetyCheckbox.OnText = MyStringId.GetOrCompute("On");
+            safetyCheckbox.Enabled = IsWarpDrive;
+            safetyCheckbox.Visible = IsWarpDrive;
+            safetyCheckbox.SupportsMultipleBlocks = false;
+            safetyCheckbox.Setter = SetWarpSafety;
+            safetyCheckbox.Getter = GetWarpSafety;
+            MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(safetyCheckbox);
+
+            // Pb Properties
             IMyTerminalControlProperty<bool> inWarp = MyAPIGateway.TerminalControls.CreateProperty<bool, IMyUpgradeModule>("WarpStatus");
             inWarp.Enabled = IsWarpDrive;
             inWarp.Visible = IsWarpDrive;
@@ -130,6 +170,85 @@ namespace WarpDriveMod
             inWarp.Setter = SetWarpStatus;
             inWarp.Getter = GetWarpStatus;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(inWarp);
+
+            IMyTerminalControlProperty<bool> warpSafetyProp = MyAPIGateway.TerminalControls.CreateProperty<bool, IMyUpgradeModule>("WarpSafety");
+            warpSafetyProp.Enabled = IsWarpDrive;
+            warpSafetyProp.Visible = IsWarpDrive;
+            warpSafetyProp.SupportsMultipleBlocks = false;
+            warpSafetyProp.Setter = SetWarpSafety;
+            warpSafetyProp.Getter = GetWarpSafety;
+            MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(warpSafetyProp);
+
+            IMyTerminalControlProperty<float> heatPercent = MyAPIGateway.TerminalControls.CreateProperty<float, IMyUpgradeModule>("WarpHeat");
+            heatPercent.Enabled = IsWarpDrive;
+            heatPercent.Visible = IsWarpDrive;
+            heatPercent.SupportsMultipleBlocks = false;
+            heatPercent.Setter = (x, y) => { };
+            heatPercent.Getter = GetWarpHeat;
+            MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(heatPercent);
+        }
+
+        #region Controls
+        private void GetWarpStatusText (IMyTerminalBlock block, StringBuilder s)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return;
+            switch (drive.System.WarpState)
+            {
+                case WarpSystem.State.Charging:
+                    s.Append("-");
+                    break;
+                case WarpSystem.State.Active:
+                    s.Append("On");
+                    break;
+                case WarpSystem.State.Idle:
+                    s.Append("Off");
+                    break;
+            }
+        }
+
+        private void GetSafetyText (IMyTerminalBlock block, StringBuilder s)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return;
+            if (drive.System.Safety)
+                s.Append("On");
+            else
+                s.Append("Off");
+        }
+
+        private void ToggleSafety (IMyTerminalBlock block)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return;
+            drive.System.Safety = !drive.System.Safety;
+        }
+
+        private bool GetWarpSafety (IMyTerminalBlock block)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return false;
+            return drive.System.Safety;
+        }
+
+        private void SetWarpSafety (IMyTerminalBlock block, bool state)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return;
+            drive.System.Safety = state;
+        }
+
+        private float GetWarpHeat(IMyTerminalBlock block)
+        {
+            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+            if (!HasValidSystem(drive))
+                return -1;
+            return drive.System.HeatPercent;
         }
 
         private bool GetWarpStatus (IMyTerminalBlock block)
@@ -156,6 +275,7 @@ namespace WarpDriveMod
                     drive.System.ToggleWarp(block.CubeGrid);
             }
         }
+        #endregion
 
         private void ReceiveToggleWarp (byte [] data)
         {
@@ -181,7 +301,6 @@ namespace WarpDriveMod
                 return;
             MyAPIGateway.Multiplayer.SendMessageToServer(toggleWarpPacketId, BitConverter.GetBytes(block.EntityId));
         }
-
 
         private bool IsWarpDrive(IMyTerminalBlock block)
         {

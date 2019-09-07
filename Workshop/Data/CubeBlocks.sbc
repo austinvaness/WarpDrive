@@ -9,7 +9,7 @@
       <Public>true</Public>
       <DisplayName>Warp Drive</DisplayName>
       <Icon>Textures\GUI\Icons\Cubes\JumpDrive.dds</Icon>
-      <Description>An advanced form of jump drive that is capable of warping space to accelerate.</Description>
+      <Description>An advanced form of jump drive that is capable of warping space to accelerate. Model by AutoMcD.</Description>
       <CubeSize>Large</CubeSize>
       <BlockTopology>TriangleMesh</BlockTopology>
       <Size x="3" y="2" z="5" />
@@ -58,14 +58,14 @@
       </Id>
       <DisplayName>Warp Radiator</DisplayName>
       <Icon>Textures\GUI\Icons\Cubes\UpgradeEffectiveness.dds</Icon>
-      <Description>A heat sink that decreases the heat generated while at warp.</Description>
+      <Description>A heat sink that decreases the heat generated while at warp. Model by AutoMcD.</Description>
       <CubeSize>Large</CubeSize>
       <BlockTopology>TriangleMesh</BlockTopology>
       <Size x="2" y="2" z="1" />
       <ModelOffset x="0" y="0" z="0" />
       <Model>Models\MA_Module_Heat.mwm</Model>
       <Components>
-        <Component Subtype="SteelPlate" Count="30" />
+        <Component Subtype="SteelPlate" Count="100" />
         <Component Subtype="Construction" Count="50" />
         <Component Subtype="SmallTube" Count="12" />
         <Component Subtype="Motor" Count="8" />

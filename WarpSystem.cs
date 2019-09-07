@@ -21,6 +21,8 @@ namespace WarpDriveMod
         public int Id { get; private set; }
         public State WarpState { get; private set; }
         public event Action<WarpSystem> onSystemInvalidated;
+        public float HeatPercent => GetHeatPercent();
+        public bool Safety = true; // TODO: Safe this to storage
 
         private GridSystem grid;
         private MatrixD gridMatrix;
@@ -33,6 +35,11 @@ namespace WarpDriveMod
         private int functionalDrives;
         private IMyCubeGrid startWarpSource;
         private float totalHeat = 0;
+
+        private float GetHeatPercent()
+        {
+            return Math.Max(Math.Min(totalHeat / WarpConstants.maxHeat, 1), 0);
+        }
 
         public WarpSystem (WarpDrive block, WarpSystem oldSystem)
         {
@@ -122,6 +129,13 @@ namespace WarpDriveMod
                 return;
             }
 
+            if(Safety && !grid.HasCockpit)
+            {
+                SendMessage(WarpConstants.warnSafety);
+                Dewarp();
+                return;
+            }
+
             if (!grid.IsStatic)
                 SetStatic(true);
 
@@ -189,19 +203,25 @@ namespace WarpDriveMod
             }
         }
 
-        public void ToggleWarp (IMyCubeGrid source)
+        public void ToggleWarp (IMyCubeGrid source, bool? requestedState = null)
         {
             if (!hasEnoughPower)
                 return;
 
             if (WarpState == State.Idle)
             {
-                StartCharging();
-                startWarpSource = source;
+                if(!requestedState.HasValue || requestedState.Value)
+                {
+                    StartCharging();
+                    startWarpSource = source;
+                }
             }
             else
             {
-                Dewarp();
+                if(!requestedState.HasValue || !requestedState.Value)
+                {
+                    Dewarp();
+                }
             }
         }
 
@@ -212,6 +232,13 @@ namespace WarpDriveMod
 
         private void StartCharging ()
         {
+            if (Safety && !grid.HasCockpit)
+            {
+                SendMessage(WarpConstants.warnSafety);
+                WarpState = State.Idle;
+                return;
+            }
+
             if (IsInGravity())
             {
                 SendMessage(WarpConstants.warnNoEstablish);
@@ -322,7 +349,14 @@ namespace WarpDriveMod
                 return;
             }
 
-            if(effect != null)
+            if (Safety && !grid.HasCockpit)
+            {
+                SendMessage(WarpConstants.warnSafety);
+                Dewarp();
+                return;
+            }
+
+            if (effect != null)
                 effect.WorldMatrix = MatrixD.CreateWorld(effect.WorldMatrix.Translation, -gridMatrix.Forward, gridMatrix.Up);
             UpdateParticleEffect();
 
