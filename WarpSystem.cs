@@ -20,16 +20,17 @@ namespace WarpDriveMod
         public int InvalidOn => grid.InvalidOn;
         public int Id { get; private set; }
         public State WarpState { get; private set; }
-        public event Action<WarpSystem> onSystemInvalidated;
+        public event Action<WarpSystem> OnSystemInvalidated;
         public float HeatPercent => GetHeatPercent();
         public bool Safety = true; // TODO: Safe this to storage
 
-        private GridSystem grid;
+        private List<IMyPlayer> gridPlayers;
+        private readonly GridSystem grid;
         private MatrixD gridMatrix;
-        private Dictionary<IMyCubeGrid, HashSet<WarpDrive>> warpDrives = new Dictionary<IMyCubeGrid, HashSet<WarpDrive>>();
+        private readonly Dictionary<IMyCubeGrid, HashSet<WarpDrive>> warpDrives = new Dictionary<IMyCubeGrid, HashSet<WarpDrive>>();
         private MyParticleEffect effect;
         private double currentSpeedPt = WarpConstants.startSpeed;
-        private MyEntity3DSoundEmitter sound;
+        private readonly MyEntity3DSoundEmitter sound;
         private int startChargeRuntime = -1;
         private bool hasEnoughPower = true;
         private int functionalDrives;
@@ -48,14 +49,16 @@ namespace WarpDriveMod
             grid = new GridSystem((MyCubeGrid)block.Block.CubeGrid);
 
             GridSystem.BlockCounter warpDriveCounter = new GridSystem.BlockCounter((b) => b?.GameLogic.GetAs<WarpDrive>() != null);
-            warpDriveCounter.onBlockAdded += OnDriveAdded;
-            warpDriveCounter.onBlockRemoved += OnDriveRemoved;
+            warpDriveCounter.OnBlockAdded += OnDriveAdded;
+            warpDriveCounter.OnBlockRemoved += OnDriveRemoved;
             grid.AddCounter("WarpDrives", warpDriveCounter);
 
-            grid.onSystemInvalidated += OnSystemInvalidated;
+            grid.OnSystemInvalidated += InvalidateSystem;
 
-            sound = new MyEntity3DSoundEmitter(grid.MainGrid);
-            sound.CanPlayLoopSounds = true;
+            sound = new MyEntity3DSoundEmitter(grid.MainGrid)
+            {
+                CanPlayLoopSounds = true
+            };
 
             if (oldSystem != null)
             {
@@ -146,7 +149,17 @@ namespace WarpDriveMod
 
             sound.SetPosition(grid.MainGrid.PositionComp.GetPosition());
 
-            gridMatrix.Translation += gridMatrix.Forward * currentSpeedPt;
+            Vector3D translate = gridMatrix.Forward * currentSpeedPt;
+            if (gridPlayers != null)
+            {
+                foreach(IMyPlayer p in gridPlayers)
+                {
+                    if(p.Character?.Physics != null)
+                        p.Character.SetPosition(p.Character.GetPosition() + translate);
+                }
+            }
+
+            gridMatrix.Translation += translate;
             grid.MainGrid.Teleport(gridMatrix);
             DrawAllLines();
         }
@@ -232,6 +245,8 @@ namespace WarpDriveMod
 
         private void StartCharging ()
         {
+            gridPlayers = grid.GetFreePlayers();
+
             if (Safety && !grid.HasCockpit)
             {
                 SendMessage(WarpConstants.warnSafety);
@@ -246,7 +261,7 @@ namespace WarpDriveMod
                 return;
             }
 
-            if (!grid.IsStatic)
+            if (!grid.IsStatic && !grid.IsInVoxels())
             {
                 sound.PlaySound(WarpConstants.jumpInSound, true);
                 WarpState = State.Charging;
@@ -265,13 +280,15 @@ namespace WarpDriveMod
 
         private void StartWarp ()
         {
+            gridPlayers = grid.GetFreePlayers();
+
             if (IsInGravity())
             {
                 SendMessage(WarpConstants.warnNoEstablish);
                 return;
             }
 
-            if (grid.IsStatic)
+            if (grid.IsStatic || grid.IsInVoxels())
             {
                 SendMessage(WarpConstants.warnStatic);
                 return;
@@ -356,8 +373,8 @@ namespace WarpDriveMod
                 return;
             }
 
-            if (effect != null)
-                effect.WorldMatrix = MatrixD.CreateWorld(effect.WorldMatrix.Translation, -gridMatrix.Forward, gridMatrix.Up);
+            //if (effect != null)
+            //    effect.WorldMatrix = MatrixD.CreateWorld(effect.WorldMatrix.Translation, -gridMatrix.Forward, gridMatrix.Up);
             UpdateParticleEffect();
 
             if (Math.Abs(WarpDriveSession.Instance.Runtime - startChargeRuntime) >= WarpConstants.chargeTicks)
@@ -378,12 +395,6 @@ namespace WarpDriveMod
                 return false;
 
             return gravComp.GetGravityMultiplier(position) > 0;
-        }
-
-        void FreezeGrid ()
-        {
-            foreach (MyCubeGrid grid in grid.Grids)
-                grid.Physics?.ClearSpeed();
         }
 
         private void UpdateHeatPower ()
@@ -469,20 +480,26 @@ namespace WarpDriveMod
                 return;
             }
 
-            Vector3D forward = gridMatrix.Forward;
-            MatrixD fromDir = MatrixD.CreateFromDir(-forward);
-            Vector3D effectOffset = forward * grid.MainGrid.PositionComp.WorldAABB.HalfExtents.AbsMax() * 2.0;
-            fromDir.Translation = grid.MainGrid.PositionComp.WorldAABB.Center + effectOffset;
-            MyParticlesManager.TryCreateParticleEffect("Warp", fromDir, out effect);
+            //Vector3D forward = gridMatrix.Forward;
+            MatrixD orientation = MatrixD.CreateFromDir(Vector3D.Backward, Vector3D.Up);//MatrixD.CreateFromDir(-forward);
+            //Vector3D effectOffset = forward * grid.MainGrid.PositionComp.WorldAABB.HalfExtents.AbsMax() * 2.0;
+            //fromDir.Translation = grid.MainGrid.PositionComp.WorldAABB.Center + effectOffset;
+            BoundingBoxD box = grid.MainGrid.PositionComp.WorldAABB;
+            orientation.Translation = Vector3D.Forward * box.HalfExtents.AbsMax() * 2.0;
+            Vector3D worldPos = box.Center;//box.Center + (forward * box.HalfExtents.AbsMax() * 2.0);
+            uint parent = grid?.MainGrid?.Render?.GetRenderObjectID() ?? 0;
+            MyParticlesManager.TryCreateParticleEffect("Warp", ref orientation, ref worldPos, parent, out effect);
+            //MyParticlesManager.TryCreateParticleEffect("Warp", fromDir, out effect);
         }
 
-        private void UpdateParticleEffect ()
+        private void UpdateParticleEffect ()// (object sender, EventArgs e)
         {
-            if (effect == null || effect.IsStopped)
-                return;
-            Vector3D forward = gridMatrix.Forward;
-            Vector3D effectOffset = forward * grid.MainGrid.PositionComp.WorldAABB.HalfExtents.AbsMax() * 2.0;
-            effect.SetTranslation(grid.MainGrid.PositionComp.WorldAABB.Center + effectOffset);
+            return;
+            //if (effect == null || effect.IsStopped)
+            //    return;
+            //Vector3D forward = gridMatrix.Forward;
+            //Vector3D effectOffset = forward * grid.MainGrid.PositionComp.WorldAABB.HalfExtents.AbsMax() * 2.0;
+            //effect.SetTranslation(grid.MainGrid.PositionComp.WorldAABB.Center + effectOffset);
         }
 
         private void StopParticleEffect ()
@@ -494,24 +511,29 @@ namespace WarpDriveMod
             effect = null;
         }
 
-        private void OnSystemInvalidated (GridSystem system)
+        private void InvalidateSystem (GridSystem system)
         {
             SetStatic(false);
             sound?.StopSound(true);
             effect?.Stop();
-            onSystemInvalidated?.Invoke(this);
-            onSystemInvalidated = null;
+            OnSystemInvalidated?.Invoke(this);
+            OnSystemInvalidated = null;
         }
 
         private void SendMessage (string msg, float seconds = 5, string font = "Red")
         {
-            if (MyAPIGateway.Utilities.IsDedicated)
+            if (!MyAPIGateway.Session.IsServer || gridPlayers == null)
+                return;
+            foreach (IMyPlayer p in gridPlayers)
+                MyVisualScriptLogicProvider.ShowNotification(msg, (int)(seconds * 1000), font, p.IdentityId);
+
+            /*if (MyAPIGateway.Utilities.IsDedicated)
                 return;
             IMyPlayer player = MyAPIGateway.Session.Player;
             IMyShipController cockpit = player?.Character?.Parent as IMyShipController;
             if (cockpit?.CubeGrid == null || !grid.Contains((MyCubeGrid)cockpit.CubeGrid))
                 return;
-            MyVisualScriptLogicProvider.ShowNotification(msg, (int)(seconds * 1000), font, player.IdentityId);
+            MyVisualScriptLogicProvider.ShowNotification(msg, (int)(seconds * 1000), font, player.IdentityId);*/
         }
 
         private void OnDriveAdded (IMyCubeBlock block)

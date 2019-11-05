@@ -106,9 +106,6 @@
     <Content Include="Workshop\metadata.mod" />
     <Content Include="Workshop\thumb.jpg" />
   </ItemGroup>
-  <ItemGroup>
-    <Analyzer Include="..\..\VS2017\SEWhitelistChecker.dll" />
-  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>cd /D "%25Appdata%25\SpaceEngineers\Mods\$(ProjectName)\"

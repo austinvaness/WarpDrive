@@ -1,5 +1,7 @@
-﻿using Sandbox.Game.Entities;
+﻿using Sandbox.Engine.Physics;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,14 +27,15 @@ namespace WarpDriveMod
         public bool HasCockpit { get; private set; }
 
         private int staticCount;
-        private Dictionary<MyCubeGrid, HashSet<IMyShipController>> cockpits = new Dictionary<MyCubeGrid, HashSet<IMyShipController>>();
-        private SortedSet<MyCubeGrid> grids = new SortedSet<MyCubeGrid>(new GridByCount());
+        private readonly Dictionary<MyCubeGrid, HashSet<IMyShipController>> cockpits = new Dictionary<MyCubeGrid, HashSet<IMyShipController>>();
+        private readonly SortedSet<MyCubeGrid> grids = new SortedSet<MyCubeGrid>(new GridByCount());
+        private readonly HashSet<IMyLandingGear> gear = new HashSet<IMyLandingGear>();
         private bool _valid = true;
 
         /// <summary>
         /// Called when a grid no longer belongs to this grid system.
         /// </summary>
-        public event Action<GridSystem> onSystemInvalidated;
+        public event Action<GridSystem> OnSystemInvalidated;
 
         public GridSystem (MyCubeGrid firstGrid)
         {
@@ -51,10 +54,46 @@ namespace WarpDriveMod
             }
         }
 
+        public bool IsInVoxels()
+        {
+            foreach(IMyLandingGear g in gear)
+            {
+                IMyEntity e = g.GetAttachedEntity();
+                if (e != null && e is IMyVoxelBase)
+                    return true;
+            }
+            return false;
+        }
+
         public bool Contains(MyCubeGrid grid)
         {
             return grids.Contains(grid);
             //return MyAPIGateway.GridGroups.HasConnection(MainGrid, grid, GridLinkTypeEnum.Logical);
+        }
+
+        public List<IMyPlayer> GetFreePlayers()
+        {
+            BoundingBoxD box = MainGrid.GetPhysicalGroupAABB();
+            //MatrixD matrix = MainGrid.WorldMatrix;
+            
+            List<IMyPlayer> result = new List<IMyPlayer>();
+            MyAPIGateway.Players.GetPlayers(result, HasPlayer);
+            for(int i = result.Count - 1; i >= 0; i--)
+            {
+                if (box.Contains(result [i].Character.GetPosition()) == ContainmentType.Disjoint)
+                    result.RemoveAtFast(i);
+            }
+            return result;
+        }
+
+        private bool HasPlayer (IMyPlayer p)
+        {
+            if (p.Character == null)
+                return false;
+            IMyCubeBlock b = p.Character.Parent as IMyCubeBlock;
+            if (b?.CubeGrid == null)
+                return true;
+            return grids.Contains((MyCubeGrid)b.CubeGrid);
         }
 
         private bool Add(MyCubeGrid grid)
@@ -107,6 +146,12 @@ namespace WarpDriveMod
                     cockpits [grid] = gridCockpits;
                 }
             }
+            else 
+            {
+                IMyLandingGear gear = fat as IMyLandingGear;
+                if (gear != null)
+                    this.gear.Remove(gear);
+            }
 
             Resort(grid);
         }
@@ -125,14 +170,22 @@ namespace WarpDriveMod
                 HashSet<IMyShipController> gridCockpits;
                 if (!cockpits.TryGetValue(grid, out gridCockpits))
                 {
-                    gridCockpits = new HashSet<IMyShipController>();
-                    gridCockpits.Add((IMyShipController)fat);
+                    gridCockpits = new HashSet<IMyShipController>
+                    {
+                        (IMyShipController)fat
+                    };
                     cockpits [grid] = gridCockpits;
                 }
                 else
                 {
                     gridCockpits.Add((IMyShipController)fat);
                 }
+            }
+            else
+            {
+                IMyLandingGear gear = fat as IMyLandingGear;
+                if (gear != null)
+                    this.gear.Add(gear);
             }
 
             Resort(grid);
@@ -176,8 +229,8 @@ namespace WarpDriveMod
         public void Invalidate()
         {
             _valid = false;
-            onSystemInvalidated?.Invoke(this);
-            onSystemInvalidated = null;
+            OnSystemInvalidated?.Invoke(this);
+            OnSystemInvalidated = null;
             foreach(BlockCounter counter in BlockCounters.Values)
                 counter.Dispose();
             foreach(MyCubeGrid grid in grids)
@@ -295,9 +348,9 @@ namespace WarpDriveMod
         public class BlockCounter
         {
             public int Count { get; private set; }
-            public event Action<IMyCubeBlock> onBlockAdded;
-            public event Action<IMyCubeBlock> onBlockRemoved;
-            private Func<IMyCubeBlock, bool> method;
+            public event Action<IMyCubeBlock> OnBlockAdded;
+            public event Action<IMyCubeBlock> OnBlockRemoved;
+            private readonly Func<IMyCubeBlock, bool> method;
 
             public BlockCounter (Func<IMyCubeBlock, bool> method)
             {
@@ -309,7 +362,7 @@ namespace WarpDriveMod
                 if (method.Invoke(block))
                 {
                     Count++;
-                    onBlockAdded?.Invoke(block);
+                    OnBlockAdded?.Invoke(block);
                 }
             }
             public void TryRemoveCount (IMyCubeBlock block)
@@ -317,14 +370,14 @@ namespace WarpDriveMod
                 if (method.Invoke(block))
                 {
                     Count--;
-                    onBlockRemoved?.Invoke(block);
+                    OnBlockRemoved?.Invoke(block);
                 }
             }
 
             public void Dispose ()
             {
-                onBlockAdded = null;
-                onBlockRemoved = null;
+                OnBlockAdded = null;
+                OnBlockRemoved = null;
             }
         }
         private class GridByCount : IComparer<MyCubeGrid>

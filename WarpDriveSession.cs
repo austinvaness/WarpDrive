@@ -53,16 +53,16 @@ namespace WarpDriveMod
     }
 
 
-    [MySessionComponentDescriptor(MyUpdateOrder.Simulation)]
+    [MySessionComponentDescriptor(MyUpdateOrder.Simulation | MyUpdateOrder.AfterSimulation | MyUpdateOrder.BeforeSimulation)]
     public class WarpDriveSession : MySessionComponentBase
     {
         public static WarpDriveSession Instance;
         public Random Rand { get; private set; } = new Random();
         public int Runtime { get; private set; } = 0;
 
-        private List<WarpSystem> warpSystems = new List<WarpSystem>();
-        private List<WarpSystem> newSystems = new List<WarpSystem>();
-        private List<WarpDrive> requireSystem = new List<WarpDrive>();
+        private readonly List<WarpSystem> warpSystems = new List<WarpSystem>();
+        private readonly List<WarpSystem> newSystems = new List<WarpSystem>();
+        private readonly List<WarpDrive> requireSystem = new List<WarpDrive>();
         private bool isHost;
         private bool isPlayer;
         private const ushort toggleWarpPacketId = 4110;
@@ -161,6 +161,8 @@ namespace WarpDriveMod
             safetyCheckbox.Setter = SetWarpSafety;
             safetyCheckbox.Getter = GetWarpSafety;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(safetyCheckbox);
+
+
 
             // Pb Properties
             IMyTerminalControlProperty<bool> inWarp = MyAPIGateway.TerminalControls.CreateProperty<bool, IMyUpgradeModule>("WarpStatus");
@@ -307,7 +309,7 @@ namespace WarpDriveMod
             return block?.GameLogic?.GetAs<WarpDrive>() != null;
         }
 
-        public override void Simulate ()
+        public override void UpdateBeforeSimulation ()
         {
             Runtime++;
 

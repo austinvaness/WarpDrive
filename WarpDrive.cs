@@ -86,7 +86,7 @@ namespace WarpDriveMod
                 else if (initStart <= WarpDriveSession.Instance.Runtime - WarpConstants.groupSystemDelay)
                 {
                     System = WarpDriveSession.Instance.GetWarpSystem(this);
-                    System.onSystemInvalidated += OnSystemInvalidated;
+                    System.OnSystemInvalidated += OnSystemInvalidated;
                     started = true;
                 }
             }
@@ -99,7 +99,7 @@ namespace WarpDriveMod
         public override void Close ()
         {
             if (System != null)
-                System.onSystemInvalidated -= OnSystemInvalidated;
+                System.OnSystemInvalidated -= OnSystemInvalidated;
         }
 
         private void InitPowerSystem ()
@@ -128,12 +128,12 @@ namespace WarpDriveMod
         public void SetWarpSystem (WarpSystem system)
         {
             System = system;
-            System.onSystemInvalidated += OnSystemInvalidated;
+            System.OnSystemInvalidated += OnSystemInvalidated;
         }
 
         public override bool Equals (object obj)
         {
-            var drive = obj as WarpDrive;
+            WarpDrive drive = obj as WarpDrive;
             return drive != null &&
                    EqualityComparer<IMyFunctionalBlock>.Default.Equals(Block, drive.Block);
         }
