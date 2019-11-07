@@ -14,6 +14,8 @@ using Sandbox.Game.Screens.Terminal.Controls;
 using Sandbox.Game.EntityComponents;
 using VRage.ModAPI;
 using VRage.Game.Entity;
+using ProtoBuf;
+using System.IO;
 
 namespace WarpDriveMod
 {
@@ -22,7 +24,8 @@ namespace WarpDriveMod
         public const double startSpeed = 100 / 60f;
         public const double maxSpeed = 100000 / 60f;
         public const double warpAccel = 100 / 60f;
-        public const double chargeTicks = 9 * 60;
+        public const int chargeTicks = 9 * 60;
+        public const double warpBubbleBuffer = 10;
 
         public const float baseRequiredPower = 32;
         public const int powerRequirementMultiplier = 5;
@@ -35,7 +38,10 @@ namespace WarpDriveMod
         public const string warnInUse = "Grid is already at warp!";
         public const string warnNoEstablish = "Unable to establish warp field!";
         public const string warnOverheat = "Warp drive overheated!";
-        public const string warnSafety = "Safety triggered, disengaging warp drive!";
+        public const string warnSafety = "Safety triggered, disengaging warp drive!"; //If safety is triggered, there is nobody to read the message!
+        public const string warnExitBubble = "You have left the influence of the warp drive!";
+        public const float warnDefaultTime = 5;
+        public const string warnDefaultFont = "Red";
 
         public const float maxHeat = 100; // Shutdown when this amount of heat has been reached.
         public const float heatGain = 10 / 60f; // Amount of heat gained per tick
@@ -49,11 +55,14 @@ namespace WarpDriveMod
 
         public const int groupSystemDelay = 1;
 
+        public const string warpEffect = "Warp";
+        public static string warpBubble = "Models\\Environment\\SafeZone\\Safezone.mwm";
+        
         public static MyDefinitionId ElectricityId = MyResourceDistributorComponent.ElectricityId;
     }
 
 
-    [MySessionComponentDescriptor(MyUpdateOrder.Simulation | MyUpdateOrder.AfterSimulation | MyUpdateOrder.BeforeSimulation)]
+    [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
     public class WarpDriveSession : MySessionComponentBase
     {
         public static WarpDriveSession Instance;
@@ -63,9 +72,10 @@ namespace WarpDriveMod
         private readonly List<WarpSystem> warpSystems = new List<WarpSystem>();
         private readonly List<WarpSystem> newSystems = new List<WarpSystem>();
         private readonly List<WarpDrive> requireSystem = new List<WarpDrive>();
-        private bool isHost;
-        private bool isPlayer;
-        private const ushort toggleWarpPacketId = 4110;
+        private const ushort packetToggleWarp = 4110;
+        private const ushort packetEffectState = 4111;
+
+
 
         public WarpDriveSession()
         {
@@ -74,12 +84,16 @@ namespace WarpDriveMod
 
         public override void BeforeStart ()
         {
-            isPlayer = !MyAPIGateway.Utilities.IsDedicated;
-            isHost = MyAPIGateway.Multiplayer.IsServer;
-
-            Action<IMyTerminalBlock> toggle;
-            MyAPIGateway.Multiplayer.RegisterMessageHandler(toggleWarpPacketId, ReceiveToggleWarp);
-            if (isHost)
+            CreateControls(); // TODO: Fix for reliability
+            if(MyAPIGateway.Session.IsServer)
+            {
+                MyAPIGateway.Multiplayer.RegisterMessageHandler(packetToggleWarp, ReceiveToggleWarp);
+            }
+            else
+            {
+                MyAPIGateway.Multiplayer.RegisterMessageHandler(packetToggleWarp, ReceiveStateUpdate);
+            }
+            /*if (MyAPIGateway.Session.IsServer)
             {
                 if (isPlayer)
                 {
@@ -106,31 +120,21 @@ namespace WarpDriveMod
                 {
                     throw new Exception("Session is not host or client. What?!");
                 }
-            }
+            }*/
+        }
+
+        #region Controls
+        private void CreateControls()
+        {
+
             // Actions
             IMyTerminalAction toggleWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarp");
             toggleWarp.Enabled = IsWarpDrive;
             toggleWarp.Name = new StringBuilder("Toggle Warp");
-            toggleWarp.Action = toggle;
+            toggleWarp.Action = ToggleWarp;
             toggleWarp.Icon = "Textures\\GUI\\Icons\\Actions\\Toggle.dds";
             toggleWarp.Writer = GetWarpStatusText;
             MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(toggleWarp);
-
-            /*IMyTerminalAction startWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarpOn");
-            startWarp.Enabled = IsWarpDrive;
-            startWarp.Name = new StringBuilder("Warp On");
-            startWarp.Action = (x) => { }; //TODO
-            startWarp.Icon = "Textures\\GUI\\Icons\\Actions\\SwitchOn.dds";
-            startWarp.Writer = GetWarpStatusText;
-            MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(startWarp);
-
-            IMyTerminalAction endWarp = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleWarpOff");
-            endWarp.Enabled = IsWarpDrive;
-            endWarp.Name = new StringBuilder("Warp Off");
-            endWarp.Action = (x) => { }; //TODO
-            endWarp.Icon = "Textures\\GUI\\Icons\\Actions\\SwitchOff.dds";
-            endWarp.Writer = GetWarpStatusText;
-            MyAPIGateway.TerminalControls.AddAction<IMyUpgradeModule>(endWarp);*/
 
             IMyTerminalAction toggleSafety = MyAPIGateway.TerminalControls.CreateAction<IMyUpgradeModule>("ToggleSafety");
             toggleSafety.Enabled = IsWarpDrive;
@@ -147,7 +151,7 @@ namespace WarpDriveMod
             startWarpBtn.Enabled = IsWarpDrive;
             startWarpBtn.Visible = IsWarpDrive;
             startWarpBtn.SupportsMultipleBlocks = false;
-            startWarpBtn.Action = toggle;
+            startWarpBtn.Action = ToggleWarp;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(startWarpBtn);
 
             IMyTerminalControlCheckbox safetyCheckbox = MyAPIGateway.TerminalControls.CreateControl<IMyTerminalControlCheckbox, IMyUpgradeModule>("Safety");
@@ -161,8 +165,6 @@ namespace WarpDriveMod
             safetyCheckbox.Setter = SetWarpSafety;
             safetyCheckbox.Getter = GetWarpSafety;
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(safetyCheckbox);
-
-
 
             // Pb Properties
             IMyTerminalControlProperty<bool> inWarp = MyAPIGateway.TerminalControls.CreateProperty<bool, IMyUpgradeModule>("WarpStatus");
@@ -190,7 +192,6 @@ namespace WarpDriveMod
             MyAPIGateway.TerminalControls.AddControl<IMyUpgradeModule>(heatPercent);
         }
 
-        #region Controls
         private void GetWarpStatusText (IMyTerminalBlock block, StringBuilder s)
         {
             WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
@@ -281,10 +282,10 @@ namespace WarpDriveMod
 
         private void ReceiveToggleWarp (byte [] data)
         {
-            if(isHost)
+            if(MyAPIGateway.Session.IsServer)
             {
                 // Message is from client and should be relayed
-                MyAPIGateway.Multiplayer.SendMessageToOthers(toggleWarpPacketId, data);
+                MyAPIGateway.Multiplayer.SendMessageToOthers(packetToggleWarp, data);
             }
 
             long id = BitConverter.ToInt64(data, 0);
@@ -296,14 +297,6 @@ namespace WarpDriveMod
                 ToggleWarp(block);
         }
 
-        private void TransmitToggleWarp (IMyTerminalBlock block)
-        {
-            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
-            if (drive == null)
-                return;
-            MyAPIGateway.Multiplayer.SendMessageToServer(toggleWarpPacketId, BitConverter.GetBytes(block.EntityId));
-        }
-
         private bool IsWarpDrive(IMyTerminalBlock block)
         {
             return block?.GameLogic?.GetAs<WarpDrive>() != null;
@@ -311,6 +304,8 @@ namespace WarpDriveMod
 
         public override void UpdateBeforeSimulation ()
         {
+            if (!MyAPIGateway.Session.IsServer)
+                return;
             Runtime++;
 
             for (int i = requireSystem.Count - 1; i >= 0; i--)
@@ -375,16 +370,145 @@ namespace WarpDriveMod
 
         private void ToggleWarp(IMyTerminalBlock block)
         {
-            WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
-            if (!HasValidSystem(drive))
-                return;
+            if (MyAPIGateway.Session.IsServer)
+            {
+                WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+                if (!HasValidSystem(drive))
+                    return;
 
-            drive.System.ToggleWarp(block.CubeGrid);
+                drive.System.ToggleWarp(block.CubeGrid);
+            }
+            else
+            {
+                WarpDrive drive = block?.GameLogic?.GetAs<WarpDrive>();
+                if (drive == null)
+                    return;
+                MyAPIGateway.Multiplayer.SendMessageToServer(packetToggleWarp, BitConverter.GetBytes(block.EntityId));
+            }
         }
 
         private bool HasValidSystem(WarpDrive drive)
         {
             return drive?.System != null && drive.System.Valid;
         }
+
+        #region Server
+        public void SendStateToClients (WarpEffectUpdate.State state, long gridSystemId, long gridId, float gridRadius)
+        {
+            try
+            {
+                // Send info to all players, they can ignore the data if they wish
+                byte [] data = MyAPIGateway.Utilities.SerializeToBinary(new WarpEffectUpdate(state, gridSystemId, gridId, gridRadius));
+                MyAPIGateway.Multiplayer.SendMessageToOthers(packetEffectState, data); 
+                if (MyAPIGateway.Session.Player != null) // The server is also a client
+                    PerformStateUpdate(state, gridSystemId, gridId, gridRadius);
+            }
+            catch
+            {
+
+            }
+        }
+        #endregion
+
+        #region Client
+        Dictionary<long, WarpEffects> warpEffects = new Dictionary<long, WarpEffects>();
+
+
+        public override void Draw ()
+        {
+            if (MyAPIGateway.Session.Player == null)
+                return;
+
+            foreach (WarpEffects effect in warpEffects.Values)
+                effect.UpdatePosition();
+        }
+
+        public void ReceiveStateUpdate(byte[] data)
+        {
+            
+            try
+            {
+                WarpEffectUpdate update = MyAPIGateway.Utilities.SerializeFromBinary<WarpEffectUpdate>(data);
+                PerformStateUpdate(update.state, update.gridSystemId, update.gridId, update.gridRadius);
+            }
+            catch 
+            { 
+
+            }
+        }
+
+        private void PerformStateUpdate (WarpEffectUpdate.State state, long gridSystemId, long gridId, float gridRadius)
+        {
+            if (state == WarpEffectUpdate.State.Destroy)
+            {
+                warpEffects.Remove(gridSystemId);
+            }
+            else
+            {
+                IMyCubeGrid grid = MyAPIGateway.Entities.GetEntityById(gridId) as IMyCubeGrid;
+                if (grid == null && state != WarpEffectUpdate.State.HardStop && state != WarpEffectUpdate.State.SoftStop)
+                    return;
+                WarpEffects effect;
+                if (!warpEffects.TryGetValue(gridSystemId, out effect))
+                {
+                    effect = new WarpEffects();
+                    warpEffects [gridSystemId] = effect;
+                }
+                switch (state)
+                {
+                    case WarpEffectUpdate.State.Charging:
+                        effect.PlayCharging(grid);
+                        return;
+
+                    case WarpEffectUpdate.State.InWarp:
+                        effect.PlayInWarp(grid, gridRadius);
+                        return;
+
+                    case WarpEffectUpdate.State.StopWarp:
+                        effect.PlayStopWarp(grid);
+                        return;
+
+                    case WarpEffectUpdate.State.HardStop:
+                        effect.FullStop();
+                        return;
+
+                    case WarpEffectUpdate.State.SoftStop:
+                        effect.FullStop(false);
+                        return;
+                }
+            }
+        }
+
+        [ProtoContract]
+        public class WarpEffectUpdate
+        {
+            [ProtoMember(1)]
+            public State state;
+            [ProtoMember(2)]
+            public long gridSystemId;
+            [ProtoMember(3)]
+            public long gridId;
+            [ProtoMember(4)]
+            public float gridRadius;
+
+            public WarpEffectUpdate()
+            {
+
+            }
+
+            public WarpEffectUpdate (State state, long gridSystemId, long gridId, float gridRadius)
+            {
+                this.state = state;
+                this.gridSystemId = gridSystemId;
+                this.gridId = gridId;
+                this.gridRadius = gridRadius;
+            }
+
+            public enum State
+            {
+                Charging, InWarp, StopWarp, HardStop, SoftStop, Destroy
+            }
+        }
+        #endregion
     }
 }

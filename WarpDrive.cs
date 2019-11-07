@@ -50,15 +50,22 @@ namespace WarpDriveMod
         public override void Init (MyObjectBuilder_EntityBase objectBuilder)
         {
             Block = (IMyFunctionalBlock)Entity;
-            Block.AppendingCustomInfo += Block_AppendingCustomInfo;
+            if (MyAPIGateway.Session.IsServer)
+            {
+                Block.AppendingCustomInfo += Block_AppendingCustomInfo;
 
-            Block.AddUpgradeValue("Radiators", 0);
-            Block.OnUpgradeValuesChanged += OnUpgradeValuesChanged;
-            InitPowerSystem();
-            sink.Update();
-            if (WarpDriveSession.Instance != null)
-                initStart = WarpDriveSession.Instance.Runtime;
-            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME;
+                Block.AddUpgradeValue("Radiators", 0);
+                Block.OnUpgradeValuesChanged += OnUpgradeValuesChanged;
+                InitPowerSystem();
+                sink.Update();
+                if (WarpDriveSession.Instance != null)
+                    initStart = WarpDriveSession.Instance.Runtime;
+                NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME;
+            }
+            else
+            {
+
+            }
         }
 
         private void Block_AppendingCustomInfo (IMyTerminalBlock arg1, StringBuilder arg2)
@@ -120,6 +127,8 @@ namespace WarpDriveMod
 
         private void OnSystemInvalidated (WarpSystem system)
         {
+            if(System != null)
+                System.OnSystemInvalidated -= OnSystemInvalidated;
             if (Block.MarkedForClose || Block.CubeGrid.MarkedForClose)
                 return;
             WarpDriveSession.Instance.DelayedGetWarpSystem(this);

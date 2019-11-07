@@ -65,25 +65,53 @@ namespace WarpDriveMod
             return false;
         }
 
+        public BoundingSphereD WorldVolume()
+        {
+            if(grids.Count > 0)
+            {
+                BoundingSphereD result = GetGridSphere(grids.First());//new BoundingSphereD(grids.First().PositionComp.WorldAABB.Center, 0);
+
+                foreach(MyCubeGrid grid in grids.Skip(1))
+                {
+                    result = result.Include(GetGridSphere(grid));
+                    /*foreach(Vector3D v in grid.PositionComp.LocalAABB.Corners)
+                    {
+                        Vector3D world = Vector3D.Transform(v, grid.WorldMatrix);
+                        double radius2 = Vector3D.DistanceSquared(world, result.Center);
+                        if(radius2 > (result.Radius * result.Radius))
+                            result.Radius = Math.Sqrt(radius2);
+                    }*/
+                }
+
+                return result;
+            }
+            return new BoundingSphereD();
+        }
+
+        private BoundingSphereD GetGridSphere(MyCubeGrid grid)
+        {
+            return new BoundingSphereD(grid.PositionComp.WorldAABB.Center, grid.PositionComp.LocalAABB.HalfExtents.Length());
+        }
+
         public bool Contains(MyCubeGrid grid)
         {
             return grids.Contains(grid);
             //return MyAPIGateway.GridGroups.HasConnection(MainGrid, grid, GridLinkTypeEnum.Logical);
         }
 
-        public List<IMyPlayer> GetFreePlayers()
+        public void GetFreePlayers(ref List<IMyPlayer> result)
         {
             BoundingBoxD box = MainGrid.GetPhysicalGroupAABB();
-            //MatrixD matrix = MainGrid.WorldMatrix;
-            
-            List<IMyPlayer> result = new List<IMyPlayer>();
+            if (result == null)
+                result = new List<IMyPlayer>();
+            else
+                result.Clear();
             MyAPIGateway.Players.GetPlayers(result, HasPlayer);
             for(int i = result.Count - 1; i >= 0; i--)
             {
                 if (box.Contains(result [i].Character.GetPosition()) == ContainmentType.Disjoint)
                     result.RemoveAtFast(i);
             }
-            return result;
         }
 
         private bool HasPlayer (IMyPlayer p)
